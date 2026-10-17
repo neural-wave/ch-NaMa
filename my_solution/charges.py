@@ -1,85 +1,21 @@
-"""Monthly charges: on every monthly anniversary Neuron cancels units in all funds and pots.
+"""Advance holdings through the monthly charge anniversaries of a policy.
 
-The charge run of a day sees the units traded before that day. Every position (fund and pot) is valued at the bid
-price on or before the day, converted into the policy currency with the rate of the day and rounded to the cent.
-
-- ADM: the admin fee valid on the day, split over the positions in proportion to their value.
-- AMC: value x rate of the pot (or of an agreement) / 12; the COBOL system charged rate x days / 360.
-- RSK: sum at risk x qx x (1 + loading) x smoker factor / 12, the sum at risk on the value left after admin fee and
-  management charge, split in proportion to the value each position has left.
-
-A split gives the rounding difference to the largest position; positions with a share of 0.00 get no booking.
+The charge run sees trades strictly before the anniversary. ChargeCalculation
+computes that day's admin, management and risk bookings; their unit cancellations
+are applied before proceeding to the next month. Public ChargeRun and split
+imports remain available here for the accounting and research tools.
 """
+from charge_allocation import split
+from charge_calculation import ChargeCalculation
 import itertools
 from collections import defaultdict
 from decimal import Decimal
 
-from charge_parameters import ChargeParameters
-from risk import SMOKER, entry_age, sum_at_risk
-from rules import add_months, money, units
+from risk import entry_age
+from rules import add_months
 
 
-def split(total, weights, cobol):
-    """
-    Split an amount over the positions in proportion to their weights.
-
-    Parameters:
-    - total (Decimal): Amount to split.
-    - weights (dict): {position: weight}
-    - cobol (bool): True for a booking of the COBOL system (truncated amounts).
-
-    Returns:
-    - dict: {position: share}, the largest position takes the rounding difference (but never goes below 0).
-    """
-    weight_sum = sum(weights.values())
-    if not total or weight_sum <= 0:
-        return {position: Decimal(0) for position in weights}
-    shares = {position: money(total * weight / weight_sum, cobol) for position, weight in weights.items()}
-    largest = max(weights, key=weights.get)
-    shares[largest] = max(shares[largest] + total - sum(shares.values()), Decimal(0))
-    return shares
-
-
-class ChargeRun(ChargeParameters):
-    def charge(self, policy, day, previous, positions, age):
-        """
-        The admin fee, management charge and risk charge of one monthly anniversary.
-
-        Parameters:
-        - policy (namedtuple): Row of `policy_base`.
-        - day (datetime.date): Monthly anniversary.
-        - previous (datetime.date): The anniversary before (for the days of the COBOL management charge).
-        - positions (dict): {(fund, pot): units} held before the day.
-        - age (int): Age of the insured person in this policy year.
-
-        Returns:
-        - list: Bookings (policy, type, fund, pot, money date, trade date, gross, amount, units).
-        """
-        cobol = day < self.conversion
-        tariff = self.tariff(policy, day)
-        rates = {position: self.market.fund_per_policy(position[0], policy.PH_CCY, day) for position in positions}
-        bids = {position: self.market.bid(position[0], day) for position in positions}
-        values = {position: money(held * bids[position] / rates[position], cobol) for position, held in positions.items()}
-
-        admin = split(min(tariff.CG_ADMFEE, sum(values.values())), values, cobol)
-        period = Decimal((day - previous).days) / 360 if cobol else Decimal(1) / 12
-        management = {position: money(value * self.management_rate(policy, position[1], tariff, day) * period, cobol)
-                      for position, value in values.items()}
-        left = {position: values[position] - admin[position] - management[position] for position in values}
-
-        qx = self.mortality[(tariff.CG_MORTTB, policy.SEX, age)]
-        smoker = tariff.CG_SMKFAC if policy.PS_SMOKE == SMOKER else 1
-        risk = sum_at_risk(policy.OPTION, sum(left.values()), policy.RK_SUMIN) * qx * (1 + policy.RK_LOAD) * smoker / 12
-        risk = split(money(risk, cobol), left, cobol)
-
-        bookings = []
-        for kind, amounts in [('ADM', admin), ('AMC', management), ('RSK', risk)]:
-            for (fund, pot), amount in amounts.items():
-                if amount:
-                    cancelled = units(amount * rates[(fund, pot)] / bids[(fund, pot)], cobol)
-                    bookings.append((policy.PH_POLNR, kind, fund, pot, None, day, None, amount, -cancelled))
-        return bookings
-
+class ChargeRun(ChargeCalculation):
     def run(self, policy, trades, until):
         """
         All monthly charges of a policy from the first monthly anniversary up to `until`.

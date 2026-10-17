@@ -7,69 +7,21 @@
 - DE: capital gains tax (KST) on the gain, less the partial exemption (TFS) from 2018 and only half of it (HEV) after
   12 years and from the age of 60 (62 from 2012); solidarity surcharge (SOL) and church tax (KIS) on the KST.
 """
-import datetime as dt
+from payout_basis import HALF_INCOME, PayoutBasis
 from decimal import Decimal
 
-from dateutil.relativedelta import relativedelta
-
 from rules import money
-from tax_data import TaxData
 
 WITHHOLDING = {'CH': 'VST', 'IT': 'SOS', 'DE': 'KST'}
-HALF_INCOME = {'held': 12, 'age': 60, 'later age': 62, 'from': dt.date(2005, 1, 1), 'later from': dt.date(2012, 1, 1)}
 
 
-class Withholding(TaxData):
-    def gain(self, policy, payout, withdrawals, country):
-        """
-        Gain of a payout in the tax currency: payout less the premiums that belong to the share paid out.
-
-        Parameters:
-        - policy (str): Policy number.
-        - payout (tuple): (event, day, processed at, amount, share).
-        - withdrawals (list): Earlier payouts of the policy as (day, share).
-        - country (str): Country of the tax.
-
-        Returns:
-        - Decimal: Gain (negative for a loss).
-        """
-        _, day, _, amount, share = payout
-        basis = Decimal(0)
-        for paid_day, premium, _ in self.premiums[policy]:
-            if paid_day <= day:
-                left = self.convert(premium, policy, country, paid_day)
-                for withdrawn_day, withdrawn in withdrawals:
-                    if withdrawn_day >= paid_day:
-                        left *= 1 - withdrawn
-                basis += left
-        return self.convert(amount, policy, country, day) - money(basis * share, day < self.conversion)
-
-    def german_base(self, policy, day, gain):
-        """
-        Taxable part of a gain in Germany: less the partial exemption, and only half after 12 years from 60.
-
-        Parameters:
-        - policy (str): Policy number.
-        - day (datetime.date): Day of the payout.
-        - gain (Decimal): Gain in EUR.
-
-        Returns:
-        - Decimal: Taxable base.
-        """
-        exemption, _ = self.rates.rate('DE', 'TFS', day)
-        base = gain * (1 - (exemption or 0))
-        terms = self.policies[policy]
-        applied = terms.PH_APPDT.date()
-        age = HALF_INCOME['later age'] if applied >= HALF_INCOME['later from'] else HALF_INCOME['age']
-        if (applied >= HALF_INCOME['from'] and relativedelta(day, terms.PH_BEGDT.date()).years >= HALF_INCOME['held']
-                and relativedelta(day, self.residence.birth(policy, day)).years >= age):
-            share, _ = self.rates.rate('DE', 'HEV', day)
-            base *= share or 1
-        return money(base, day < self.conversion)
-
+class Withholding(PayoutBasis):
     def withholding(self, policy, payout, withdrawals, country, region):
         """
-        Taxable base, withheld tax and surcharges of a payout, for the taxes Neuron booked.
+        Report the payout base independently of whether Neuron booked withholding.
+
+        The absence of a withholding booking controls the tax amounts, rather than
+        erasing the base. Countries without a supported withholding regime keep a zero base.
 
         Returns:
         - tuple: (base, withheld, surcharges, {tax type: amount})
@@ -77,13 +29,15 @@ class Withholding(TaxData):
         event, day, known, amount, _ = payout
         booked, cobol = self.booked[(policy, event)], day < self.conversion
         tax = WITHHOLDING.get(country)
-        if tax not in booked:
-            return Decimal('0.00'), Decimal('0.00'), Decimal('0.00'), {}
         if country == 'CH':
             base = self.convert(amount, policy, country, day)
-        else:
-            base = max(self.gain(policy, payout, withdrawals, country), Decimal(0))
+        elif country in ('IT', 'DE'):
+            base = max(self.gain(policy, payout, withdrawals, country), Decimal('0.00'))
             base = self.german_base(policy, day, base) if country == 'DE' else base
+        else:
+            base = Decimal('0.00')
+        if tax not in booked:
+            return base, Decimal('0.00'), Decimal('0.00'), {}
         rate, _ = self.rates.rate(country, tax, day, known)
         withheld = money(base * rate, cobol)
         amounts = {tax: withheld}

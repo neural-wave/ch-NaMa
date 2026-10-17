@@ -5,12 +5,11 @@ into the policy currency and rounded to the cent. The surrender penalty depends 
 and the completed policy years; there is no penalty in a waiver period. Surrendered policies and policies of insured
 persons who died are worth 0.
 """
+from valuation import policy_values
 import functools
-from decimal import Decimal
 
 from dateutil.relativedelta import relativedelta
 
-from ledger import ledger
 from legacy_loader import valid_on
 from market import Market
 from policies import policy_base
@@ -32,24 +31,6 @@ def penalty_rate(data, scale, years, day):
     rates = data.table('NRSURR')
     rates = rates[(rates.SR_SCALE == scale) & (rates.SR_YEAR == years)]
     return data.exact(rates.SR_RATE)[0] if len(rates) else 0
-
-
-def policy_values(data, market, day):
-    """Value of the units of every policy on `day`, each fund and pot rounded to the cent.
-    Parameters: data (LegacyData): Decoded export; market (Market): Prices and exchange rates; day (datetime.date):
-        Valuation date.
-    Returns (dict): {policy number: value}.
-    """
-    cobol = day < conversion_date(data).date()
-    currency = dict(zip(data.table('NRPOLH').PH_POLNR, data.table('NRPOLH').PH_CCY))
-    values = {}
-    for (policy, fund, _), (days, held) in ledger(data).units.items():
-        booked = days.searchsorted(day.toordinal(), side='right')
-        if booked:
-            units = Decimal(int(held[booked - 1])).scaleb(-6)  # millionths back to units with 6 decimals
-            rate = market.fund_per_policy(fund, currency[policy], day)
-            values[policy] = values.get(policy, 0) + money(units * market.bid(fund, day) / rate, cobol)
-    return values
 
 
 def surrender_values(data, valuation_dates):

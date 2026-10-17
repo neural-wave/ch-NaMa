@@ -33,7 +33,8 @@ Università della Svizzera italiana (USI), Lugano.
 | t5 Outliers | 55 found | all 38 NREXCP corrections of the train policies plus 17 unlisted ones |
 | t7 Tax audit (surprise) | no targets | both examples of the task exact; every tax Neuron booked gets an amount |
 
-Maintainability index (radon): 75. Runtime: about 35 seconds for t0-t5 with a peak memory of 1.7 GB; t7 adds 3 seconds,
+Maintainability index (provided local scorer): 83.2, up from 75.3 with identical local predictions and accounting.
+Runtime: about 35 seconds for t0-t5 with a peak memory of 1.7 GB; t7 adds 3 seconds,
 as it reuses the fund accounting.
 
 ## Approach
@@ -142,6 +143,12 @@ train policies are exact except one manual correction.
 
 `my_solution/`:
 
+- Task modules retain their public imports and delegate distinct responsibilities to focused helpers:
+  `tax_rates.py`, `residence.py`, `payout_basis.py` and `payout_taxes.py` handle the tax calculation layers;
+  `charge_calculation.py` and `charge_allocation.py` handle one monthly charge while `charges.py` advances holdings;
+  `legacy_reader.py`, `legacy_numbers.py` and `legacy_dates.py` handle CSV reading and decoding;
+  `validity.py`, `offer_terms.py`, `orders.py`, `valuation.py`, `premium_allocation.py`, `premium_schedule.py`
+  and `premium_tax.py` hold the corresponding lookup, policy and premium rules. Include all helper files in a submission.
 - `submission.py`: the entry point, one function per task.
 - `commission.py` (t0), `schedule.py` (t1), `projection.py` (t2), `surrender.py` (t3), `statement.py` (t4),
   `outliers.py` (t5), `taxes.py` with `tax_data.py`, `withholding.py`, `tax_rules.py` and `stamp_duty.py` (t7):
