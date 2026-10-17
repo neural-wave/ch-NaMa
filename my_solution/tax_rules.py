@@ -28,16 +28,11 @@ def tax_currency(country):
 
 
 def remittance_date(country, day):
-    """Nominal remittance deadline, moved to Monday if it falls on a weekend.
-
-    Weekend adjustment is the T7 MONDAY experiment, pending organizer feedback.
+    """Day a tax withheld on `day` was paid to the tax office.
     Parameters: country (str): Country whose tax office gets the money; day (datetime.date): Day of the payout.
     Returns (datetime.date): Remittance date.
     """
     next_month = day.replace(day=1) + relativedelta(months=1)
     if country in REMITTANCE_DAY:
-        remitted = next_month.replace(day=REMITTANCE_DAY[country])
-    else:
-        remitted = next_month - dt.timedelta(days=1) + dt.timedelta(days=CH_REMITTANCE_DAYS)
-    weekday = remitted.weekday()
-    return remitted + dt.timedelta(days=7 - weekday) if weekday >= 5 else remitted
+        return next_month.replace(day=REMITTANCE_DAY[country])
+    return next_month - dt.timedelta(days=1) + dt.timedelta(days=CH_REMITTANCE_DAYS)

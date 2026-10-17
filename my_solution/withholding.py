@@ -21,7 +21,8 @@ class Withholding(PayoutBasis):
         Report the payout base independently of whether Neuron booked withholding.
 
         The absence of a withholding booking controls the tax amounts, rather than
-        erasing the base. Countries without a supported withholding regime keep a zero base.
+        erasing the base; a loss is reported as a negative base (Italy, Germany).
+        Countries without a supported withholding regime keep a zero base.
 
         Returns:
         - tuple: (base, withheld, surcharges, {tax type: amount})
@@ -32,7 +33,7 @@ class Withholding(PayoutBasis):
         if country == 'CH':
             base = self.convert(amount, policy, country, day)
         elif country in ('IT', 'DE'):
-            base = max(self.gain(policy, payout, withdrawals, country), Decimal('0.00'))
+            base = self.gain(policy, payout, withdrawals, country)
             base = self.german_base(policy, day, base) if country == 'DE' else base
         else:
             base = Decimal('0.00')
@@ -45,4 +46,4 @@ class Withholding(PayoutBasis):
             surcharge_rate, _ = self.rates.rate(country, surcharge, day, known, region)
             if surcharge in booked and surcharge_rate is not None:
                 amounts[surcharge] = money(withheld * surcharge_rate, cobol)
-        return base, withheld, sum(amounts.get(name, Decimal(0)) for name in ['SOL', 'KIS']), amounts
+        return base, withheld, sum(amounts.get(name, Decimal('0.00')) for name in ['SOL', 'KIS']), amounts
