@@ -27,7 +27,7 @@ def stamp_duty(module, policy, payouts):
     Returns:
     - list: [(day, amount)]
     """
-    paid = {event: (day, amount) for event, day, _, amount, _ in payouts}
+    paid = {event: (day, module.stamp_values[(policy, event)]) for event, day, _, _, _ in payouts}
     booked_years, result = {}, []
     for row in module.bookings[(module.bookings.TB_POLNR == policy) & (module.bookings.TB_TAXTP == 'BOL')].itertuples():
         day = row.TB_EFFDT.date()

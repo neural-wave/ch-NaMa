@@ -3,18 +3,25 @@
 Which taxes Neuron booked for a payout or a year is in its tax bookings (NRTAXB, without amounts); the classes built on
 TaxData calculate the amounts (withholding.py, taxes.py). Amounts are rounded to the cent by system era: cut off by the
 COBOL system, half up by Neuron NG.
+
+Neuron taxed what the customer received: a withdrawal or surrender less the surrender penalty of the scale (the Swiss
+threshold of CHF 5,000 is met by the net amount in every booking), a death claim as the death benefit of the option.
 """
 from collections import defaultdict
 from decimal import Decimal
 
+from dateutil.relativedelta import relativedelta
+
 from accounting import ORDER_TYPES, ignored_events
 from market import Market
 from policies import policy_base
+from risk import sum_at_risk
 from rules import conversion_date, money
-from surrender import policy_values
+from surrender import penalty_rate, policy_values
 from tax_rules import Residence, TaxRates, tax_currency
 
 PAYOUT_EVENTS = [400, 410, 500]
+DEATH = 500
 PAYOUT_BOOKINGS = ['WDR', 'SUR', 'DTH']
 
 
@@ -41,13 +48,36 @@ class TaxData:
         for row, amount in zip(premiums.itertuples(), data.exact(premiums.PR_AMTRC)):
             self.premiums[row.PR_POLNR].append((row.PR_RCVDT.date(), amount, row.PR_EVTNR))
         self.values = {}
+        self.stamp_values = {}
+
+    def amount_paid(self, policy, event_type, day, sold):
+        """
+        What the customer received for the units sold: less the surrender penalty, or plus the sum at risk on death.
+
+        Parameters:
+        - policy (str): Policy number.
+        - event_type (int): 400 withdrawal, 410 surrender, 500 death claim.
+        - day (datetime.date): Day of the payout.
+        - sold (Decimal): Value of the units sold, in the policy currency.
+
+        Returns:
+        - Decimal: Amount paid in the policy currency, rounded by system era.
+        """
+        terms = self.policies[policy]
+        if event_type == DEATH:
+            return money(sold + sum_at_risk(terms.OPTION, sold, terms.RK_SUMIN), day < self.conversion)
+        years = relativedelta(day, terms.PH_BEGDT.date()).years
+        return money(sold * (1 - Decimal(penalty_rate(self.data, terms.PD_SRPSCL, years, day))), day < self.conversion)
 
     def payouts(self):
         """
         Every payout that counts: withdrawals, surrenders and death benefits that were not reversed.
 
+        Also keeps `stamp_values`: the policy value a payout's stamp duty is based on (what was paid, on death the
+        value of the units).
+
         Returns:
-        - dict: {policy: [(event, day, processed at, amount in policy currency, share of units sold)]}, by event.
+        - dict: {policy: [(event, day, processed at, amount paid in policy currency, share of units sold)]}, by event.
         """
         events = self.data.table('NREVNT')
         events = events[events.EV_EVTTP.isin(PAYOUT_EVENTS)].sort_values('EV_EVTNR')
@@ -62,7 +92,10 @@ class TaxData:
             if key in ignored or key not in totals:
                 continue
             share = Decimal(1) if row.EV_PCTG != row.EV_PCTG else Decimal(str(row.EV_PCTG))
-            payouts[row.EV_POLNR].append((int(row.EV_EVTNR), row.EV_EFFDT.date(), row.EV_CHGTS, totals[key], share))
+            day = row.EV_EFFDT.date()
+            paid = self.amount_paid(row.EV_POLNR, int(row.EV_EVTTP), day, totals[key])
+            self.stamp_values[key] = totals[key] if int(row.EV_EVTTP) == DEATH else paid
+            payouts[row.EV_POLNR].append((int(row.EV_EVTNR), day, row.EV_CHGTS, paid, share))
         return payouts
 
     def convert(self, amount, policy, country, day):
