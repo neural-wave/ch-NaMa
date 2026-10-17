@@ -36,7 +36,7 @@ def to_integers(values):
         numbers = pc.cast(pc.if_else(pc.equal(text, ''), None, text), pa.int64())
     except pa.ArrowInvalid:
         return pd.to_numeric(values.str.strip().replace('', None), errors='coerce')
-    return pd.Series(numbers.to_pandas(), index=values.index)
+    return pd.Series(numbers.to_pandas().to_numpy(), index=values.index, name=values.name)
 
 
 def decode_date(values):

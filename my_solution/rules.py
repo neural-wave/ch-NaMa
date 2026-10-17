@@ -69,15 +69,22 @@ def valid_on_date(items, date_column, table, prefix, on, keep_all=False):
     Returns:
     - pd.DataFrame: The items joined with their valid row.
     """
-    items = items.reset_index(drop=True).reset_index(names='item')
-    merged = items.merge(table, left_on=list(on), right_on=list(on.values())) if on else items.merge(table, how='cross')
+    # Find the valid row with the keys and dates only: merging all columns first takes gigabytes for the premiums
+    items = items.reset_index(drop=True)
+    periods = [column for column in [f'{prefix}_VLDFR', f'{prefix}_VLDTO', f'{prefix}_VRSNR'] if column in table]
+    rows = table[list(dict.fromkeys(list(on.values()) + periods))].reset_index(drop=True).reset_index(names='row')
+    dates = items[list(on) + [date_column]].reset_index(names='item')
+    merged = dates.merge(rows, left_on=list(on), right_on=list(on.values())) if on else dates.merge(rows, how='cross')
     valid = merged[(merged[f'{prefix}_VLDFR'] <= merged[date_column]) & (merged[date_column] <= merged[f'{prefix}_VLDTO'])]
     if f'{prefix}_VRSNR' in valid:
         valid = valid.sort_values(f'{prefix}_VRSNR')
-    valid = valid.drop_duplicates('item', keep='last')
+    valid = valid.drop_duplicates('item', keep='last').sort_values('item')
+
+    found = table.iloc[valid.row.to_numpy()].set_axis(valid.item.to_numpy())
+    found = found.drop(columns=[column for column in found if column in items])
     if keep_all:
-        valid = items.merge(valid[['item'] + list(table.columns)], on='item', how='left')
-    return valid.sort_values('item').drop(columns='item').reset_index(drop=True)
+        return items.join(found)
+    return items.loc[valid.item.to_numpy()].join(found).reset_index(drop=True)
 
 
 def money(amount, truncate=False):

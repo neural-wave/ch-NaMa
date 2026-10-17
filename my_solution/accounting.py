@@ -8,7 +8,10 @@
 import datetime as dt
 import functools
 import itertools
+from collections import defaultdict, namedtuple
+from decimal import Decimal
 
+import numpy as np
 import pandas as pd
 
 from charges import ChargeRun
@@ -20,6 +23,10 @@ from rules import conversion_date, extract_date
 ORDER_TYPES = ['SWO', 'SWI', 'WDR', 'SUR', 'DTH']
 REVERSAL, TECHNICAL_CORRECTION = 900, 990
 SURRENDERED, DEATH = 60, 70
+CHARGE_COLUMNS = {'ADM': 1, 'AMC': 2, 'RSK': 3}
+MILLION = 1_000_000  # units have 6 decimals: held in millionths they are exact integers
+
+Ledger = namedtuple('Ledger', ['units', 'charges'])
 
 
 def ignored_events(data):
@@ -48,7 +55,7 @@ def order_bookings(data):
     Returns:
     - pd.DataFrame: One row per booking, in the columns of BOOKING_COLUMNS.
     """
-    orders = data.table('NRBOOK').query('BK_BKTYP in @ORDER_TYPES')
+    orders = data.select('NRBOOK', 'BK_BKTYP', ORDER_TYPES)
     ignored = ignored_events(data)
     orders = orders[[(policy, event) not in ignored for policy, event in zip(orders.BK_POLNR, orders.BK_EVTNR)]]
     return pd.DataFrame({
@@ -71,9 +78,38 @@ def end_dates(data):
     return {policy: day.date() for policy, day in ended.items()}
 
 
+def policy_bookings(data, until):
+    """
+    The unit bookings of one policy after the other: premiums, customer orders and monthly charges up to `until`.
+
+    One policy at a time, so that the 6.8 million bookings of the export never sit in memory together.
+
+    Parameters:
+    - data (LegacyData): Decoded export.
+    - until (datetime.date): Last day of the monthly charges.
+
+    Returns:
+    - generator: (policy number, [booking as a tuple in the columns of BOOKING_COLUMNS])
+    """
+    market, conversion = Market(data), conversion_date(data).date()
+    # Rows as namedtuples by policy number: much faster to read in the booking loops than pandas rows
+    policies = {policy.PH_POLNR: policy for policy in policy_base(data).itertuples()}
+    trades = defaultdict(list)
+    orders = order_bookings(data).itertuples(index=False, name=None)
+    for booking in itertools.chain(premium_bookings(data, market, policies, conversion), orders):
+        trades[booking[0]].append(booking)
+
+    run, ended = ChargeRun(data, market, conversion), end_dates(data)
+    for policy, booked in trades.items():
+        booked.sort(key=lambda booking: booking[5])  # by trade date
+        moves = [(trade, fund, pot, units) for _, _, fund, pot, _, trade, _, _, units in booked]
+        last_day = min(until, ended[policy] - dt.timedelta(days=1)) if policy in ended else until
+        yield policy, booked + run.run(policies[policy], moves, last_day)
+
+
 def all_bookings(data, until):
     """
-    All unit bookings of every policy up to `until`.
+    All unit bookings of every policy up to `until` as one table, to explore them (the tasks use `ledger`).
 
     Parameters:
     - data (LegacyData): Decoded export.
@@ -82,49 +118,35 @@ def all_bookings(data, until):
     Returns:
     - pd.DataFrame: One row per booking, in the columns of BOOKING_COLUMNS.
     """
-    market, conversion = Market(data), conversion_date(data).date()
-    # Rows as namedtuples by policy number: much faster to read in the booking loops than pandas rows
-    policies = {policy.PH_POLNR: policy for policy in policy_base(data).itertuples()}
-    trades = pd.concat([premium_bookings(data, market, policies, conversion), order_bookings(data)])
-    trades = trades.sort_values('trade', kind='stable')
-
-    run, ended = ChargeRun(data, market, conversion), end_dates(data)
-    charges = []
-    for policy, rows in trades.groupby('policy', sort=False):
-        moves = list(zip(rows.trade, rows.fund, rows.pot, rows.units))
-        last_day = min(until, ended[policy] - dt.timedelta(days=1)) if policy in ended else until
-        charges += run.run(policies[policy], moves, last_day)
-    return pd.concat([trades, pd.DataFrame(charges, columns=BOOKING_COLUMNS)], ignore_index=True)
+    rows = [booking for _, booked in policy_bookings(data, until) for booking in booked]
+    return pd.DataFrame(rows, columns=BOOKING_COLUMNS)
 
 
 @functools.cache
-def bookings(data):
+def ledger(data):
     """
-    All bookings up to the extract date (the last event of the export), shared by t3 and t4.
+    What the tasks need from all bookings up to the extract date, collected policy by policy.
 
     Parameters:
     - data (LegacyData): Decoded export.
 
     Returns:
-    - pd.DataFrame: Result of `all_bookings`.
+    - Ledger:
+      units: {(policy, fund, pot): (trade days as ordinals, units held after each day in millionths)}, numpy
+      arrays, so that a valuation on any day (t3, t7) is one search per position;
+      charges: {(policy, year of the trade date): [entry, admin, management, risk]} for the statements (t4).
     """
-    return all_bookings(data, extract_date(data))
-
-
-@functools.cache
-def unit_history(data):
-    """
-    Units of every position after each of its bookings, so that a valuation does not re-add millions of bookings.
-
-    Parameters:
-    - data (LegacyData): Decoded export.
-
-    Returns:
-    - dict: {(policy, fund, pot): (trade dates in order, units held after each)}
-    """
-    table = bookings(data)
-    history = {}
-    for position, rows in table.groupby(['policy', 'fund', 'pot'], sort=False):
-        trades = sorted(zip(rows.trade.tolist(), rows.units.tolist()), key=lambda trade: trade[0])
-        history[position] = ([day for day, _ in trades], list(itertools.accumulate(held for _, held in trades)))
-    return history
+    units, charges = {}, defaultdict(lambda: [Decimal(0)] * 4)
+    for policy, booked in policy_bookings(data, extract_date(data)):
+        moves = defaultdict(list)
+        for _, kind, fund, pot, _, trade, gross, amount, held in booked:
+            moves[(fund, pot)].append((trade.toordinal(), int(held * MILLION)))
+            if kind == 'PRM':
+                charges[(policy, trade.year)][0] += gross - amount
+            elif kind in CHARGE_COLUMNS:
+                charges[(policy, trade.year)][CHARGE_COLUMNS[kind]] += amount
+        for (fund, pot), changes in moves.items():
+            changes.sort(key=lambda change: change[0])
+            units[(policy, fund, pot)] = (np.array([day for day, _ in changes]),
+                                          np.cumsum([change for _, change in changes]))
+    return Ledger(units, charges)

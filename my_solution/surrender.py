@@ -5,12 +5,12 @@ into the policy currency and rounded to the cent. The surrender penalty depends 
 and the completed policy years; there is no penalty in a waiver period. Surrendered policies and policies of insured
 persons who died are worth 0.
 """
-import bisect
 import functools
+from decimal import Decimal
 
 from dateutil.relativedelta import relativedelta
 
-from accounting import unit_history
+from accounting import ledger
 from legacy_loader import valid_on
 from market import Market
 from policies import policy_base
@@ -56,11 +56,12 @@ def policy_values(data, market, day):
     cobol = day < conversion_date(data).date()
     currency = dict(zip(data.table('NRPOLH').PH_POLNR, data.table('NRPOLH').PH_CCY))
     values = {}
-    for (policy, fund, _), (days, held) in unit_history(data).items():
-        booked = bisect.bisect_right(days, day)
+    for (policy, fund, _), (days, held) in ledger(data).units.items():
+        booked = days.searchsorted(day.toordinal(), side='right')
         if booked:
+            units = Decimal(int(held[booked - 1])).scaleb(-6)  # millionths back to units with 6 decimals
             rate = market.fund_per_policy(fund, currency[policy], day)
-            values[policy] = values.get(policy, 0) + money(held[booked - 1] * market.bid(fund, day) / rate, cobol)
+            values[policy] = values.get(policy, 0) + money(units * market.bid(fund, day) / rate, cobol)
     return values
 
 

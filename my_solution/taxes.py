@@ -18,7 +18,7 @@ from decimal import Decimal
 
 from dateutil.relativedelta import relativedelta
 
-from accounting import ignored_events
+from accounting import ORDER_TYPES, ignored_events
 from market import Market
 from policies import policy_base
 from rules import conversion_date, money
@@ -66,7 +66,7 @@ class TaxModule:
         """
         events = self.data.table('NREVNT')
         events = events[events.EV_EVTTP.isin(PAYOUT_EVENTS)].sort_values('EV_EVTNR')
-        books = self.data.table('NRBOOK').query('BK_BKTYP in @PAYOUT_BOOKINGS')
+        books = self.data.select('NRBOOK', 'BK_BKTYP', ORDER_TYPES).query('BK_BKTYP in @PAYOUT_BOOKINGS')
         totals = defaultdict(Decimal)
         for policy, event, amount in zip(books.BK_POLNR, books.BK_EVTNR, self.data.exact(books.BK_AMTPC)):
             totals[(policy, event)] -= amount

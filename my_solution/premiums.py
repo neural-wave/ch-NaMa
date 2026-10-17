@@ -6,7 +6,6 @@ date that the fund has a price, at the issue (ask) price, converted with the exc
 """
 import datetime as dt
 
-import pandas as pd
 
 from rules import add_months, money, units, valid_on_date
 
@@ -25,7 +24,8 @@ def allocated_premiums(data):
     Returns:
     - pd.DataFrame: Premium items joined with their allocation, broker tier and entry charge rate.
     """
-    premiums = data.table('NRPREM').query('PR_STATE == @PAID')
+    # Only the columns the bookings need: 550,000 rows with every column of six tables take gigabytes
+    premiums = data.table('NRPREM').query('PR_STATE == @PAID')[['PR_POLNR', 'PR_DUENR', 'PR_RCVDT', 'PR_AMTRC']]
 
     # The allocation version valid on the money date, with all its funds
     allocated = premiums.merge(data.table('NRALLO'), left_on='PR_POLNR', right_on='AL_POLNR')
@@ -34,7 +34,8 @@ def allocated_premiums(data):
     allocated = allocated[allocated.AL_VRSNR == newest]
 
     # Entry charge of the broker tier, replaced by an individual agreement while one is valid
-    allocated = valid_on_date(allocated, 'PR_RCVDT', data.table('NRPOLH'), 'PH', {'PR_POLNR': 'PH_POLNR'})
+    versions = data.table('NRPOLH')[['PH_POLNR', 'PH_VRSNR', 'PH_VLDFR', 'PH_VLDTO', 'PH_BRKNR']]
+    allocated = valid_on_date(allocated, 'PR_RCVDT', versions, 'PH', {'PR_POLNR': 'PH_POLNR'})
     allocated = allocated.merge(data.table('NRBROK'), left_on='PH_BRKNR', right_on='BR_BRKNR')
     allocated = valid_on_date(allocated, 'PR_RCVDT', data.table('NRENTC'), 'EC', {'BR_TIER': 'EC_TIER'})
     agreements = data.table('NRAGRE').query("AG_FEETP == 'ENT'")
@@ -54,7 +55,7 @@ def premium_bookings(data, market, policies, conversion):
     - conversion (datetime.date): Day of the system conversion.
 
     Returns:
-    - pd.DataFrame: One row per booking: policy, type, fund, pot, money date, trade date, gross, amount, units.
+    - list: Bookings as tuples in the columns of BOOKING_COLUMNS (plain tuples need far less memory than a table).
     """
     allocated = allocated_premiums(data)
     received, shares = data.exact(allocated.PR_AMTRC), data.exact(allocated.AL_PCTG)
@@ -72,5 +73,5 @@ def premium_bookings(data, market, policies, conversion):
         rate = market.fund_per_policy(item.AL_FNDID, policy.PH_CCY, trade - dt.timedelta(days=1))
         rows.append((item.PR_POLNR, 'PRM', item.AL_FNDID, '1' if money_date < initial_end else '2', money_date,
                      trade, gross * share, amount, units(amount * rate / ask, cobol)))
-    return pd.DataFrame(rows, columns=BOOKING_COLUMNS)
+    return rows
 
