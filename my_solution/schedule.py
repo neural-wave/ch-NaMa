@@ -1,7 +1,7 @@
 """t1: the premium due dates of the next year, and the days the money is collected."""
 from dateutil.relativedelta import relativedelta
 
-from business_calendar import next_business_day
+from business_calendar import calendar
 from legacy_loader import valid_on
 from rules import conversion_date
 
@@ -40,18 +40,19 @@ def due_dates(begin, end, months, conversion, until):
     return dates
 
 
-def collection_date(due, payment_method):
+def collection_date(due, payment_method, business_days):
     """
     Day the premium is collected: a direct debit (LS) on the next business day, a bank transfer (UB) on the due date.
 
     Parameters:
     - due (datetime.date): Due date.
     - payment_method (str): 'LS' or 'UB'.
+    - business_days (BusinessCalendar): Business calendar of the export.
 
     Returns:
     - datetime.date: Collection date.
     """
-    return next_business_day(due) if payment_method == 'LS' else due
+    return business_days.next_business_day(due) if payment_method == 'LS' else due
 
 
 def next_due_dates(data, extract_date):
@@ -66,7 +67,7 @@ def next_due_dates(data, extract_date):
     - dict: {(policy number, n): (due date, collection date)} with n = 1, 2, ... after the extract date.
     """
     until = extract_date + relativedelta(years=1)
-    conversion = conversion_date(data).date()
+    conversion, business_days = conversion_date(data).date(), calendar(data)
 
     # Policy version valid on the extract date: in force (state 10) and paying regular premiums
     policies = valid_on(data.table('NRPOLH'), 'PH', extract_date, ['PH_POLNR'])
@@ -78,5 +79,5 @@ def next_due_dates(data, extract_date):
                           conversion, until)
         future = [due for due in dates if due > extract_date]
         for n, due in enumerate(future, start=1):
-            result[(policy.PH_POLNR, n)] = (due, collection_date(due, policy.PH_PAYMT))
+            result[(policy.PH_POLNR, n)] = (due, collection_date(due, policy.PH_PAYMT, business_days))
     return result
