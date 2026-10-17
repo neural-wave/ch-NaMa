@@ -94,7 +94,8 @@ class Market:
         - Decimal: Exchange rate.
         """
         days, values = self.rates[currency]
-        return values[bisect.bisect_right(days, day) - 1]
+        # Before the first rate of a currency (EUR before 1999) its first rate is used
+        return values[max(bisect.bisect_right(days, day) - 1, 0)]
 
     def fund_per_policy(self, fund, policy_currency, day):
         """

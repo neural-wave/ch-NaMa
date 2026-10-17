@@ -10,6 +10,7 @@ Dates are `datetime.date`, amounts are `decimal.Decimal`. The rules live in one 
 - surrender.py: t3, surrender value
 - statement.py: t4, annual statement
 - outliers.py: t5, values changed by hand
+- taxes.py, tax_rules.py: t7, the tax module (surprise challenge)
 - rules.py: what all tasks share (parameter lookups, rounding, business calendar)
 - legacy_loader.py: reads and decodes the export with the data dictionary NRDICT
 """
@@ -23,6 +24,7 @@ from rules import extract_date, load
 from schedule import next_due_dates
 from statement import annual_statements
 from surrender import surrender_values
+from taxes import tax_results
 
 
 def t0_commission(legacy_dir) -> dict[tuple[str, int], Decimal]:
@@ -66,3 +68,13 @@ def t5_outlier_detection(legacy_dir, targets_dir) -> set[tuple[str, object]]:
         't4_annual_statement': lambda keys: annual_statements(data),
     }
     return manual_corrections(calculators, targets_dir)
+
+
+def t7_tax_payout(legacy_dir) -> dict[tuple[str, int], tuple]:
+    """{(policy_id, event_nr): (country, taxable_base, withholding, surcharges, stamp_duty, remittance_date)}"""
+    return tax_results(load(legacy_dir))[0]
+
+
+def t7_tax_annual(legacy_dir) -> dict[tuple[str, int], tuple[Decimal, ...]]:
+    """{(policy_id, year): (ch_stp, ch_vst, it_sos, it_bol, de_kst, de_sol, de_kis)}, years with an amount only"""
+    return tax_results(load(legacy_dir))[1]
