@@ -14,9 +14,9 @@ import datetime as dt
 from dateutil.relativedelta import relativedelta
 
 TAX_CURRENCY = {'CH': 'CHF'}
-# Withheld taxes are paid on this day of the next month (DE, IT) or 30 days after the end of the month (CH)
-REMITTANCE_DAY = {'DE': 10, 'IT': 16}
-CH_REMITTANCE_DAYS = 30
+# Neuron's tax job ran on the 10th of every month (the year-end stamp duty is processed on 10 January): withheld
+# taxes of a month are paid on the 10th of the next month, for every country
+REMITTANCE_DAY = 10
 
 
 def tax_currency(country):
@@ -32,7 +32,4 @@ def remittance_date(country, day):
     Parameters: country (str): Country whose tax office gets the money; day (datetime.date): Day of the payout.
     Returns (datetime.date): Remittance date.
     """
-    next_month = day.replace(day=1) + relativedelta(months=1)
-    if country in REMITTANCE_DAY:
-        return next_month.replace(day=REMITTANCE_DAY[country])
-    return next_month - dt.timedelta(days=1) + dt.timedelta(days=CH_REMITTANCE_DAYS)
+    return (day.replace(day=1) + relativedelta(months=1)).replace(day=REMITTANCE_DAY)
