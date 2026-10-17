@@ -33,7 +33,8 @@ Università della Svizzera italiana (USI), Lugano.
 | t5 Outliers | 55 found | all 38 NREXCP corrections of the train policies plus 17 unlisted ones |
 | t7 Tax audit (surprise) | no targets | both examples of the task exact; every tax Neuron booked gets an amount |
 
-Maintainability index (radon): 68. Runtime: about 1.5 minutes for t0-t5, 1 minute more for t7.
+Maintainability index (radon): 68. Runtime: about 45 seconds for t0-t5, 30 of them for the fund accounting of t3; t7 adds 3 seconds, as it reuses
+the accounting.
 
 ## Approach
 

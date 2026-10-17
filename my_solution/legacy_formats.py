@@ -9,11 +9,34 @@
 from decimal import Decimal
 
 import pandas as pd
+import pyarrow as pa
+import pyarrow.compute as pc
 
 # Stand-in for the open end date 9999999 (pandas cannot store year 9999)
 OPEN_END = pd.Timestamp('2200-12-31')
 NO_DATE = 0
 OPEN_END_CODE = 9999999
+
+
+def to_integers(values):
+    """
+    Parse integers written as text, blanks around them and empty fields allowed.
+
+    pyarrow parses the 6.8 million bookings about ten times faster than pd.to_numeric; text that is not an integer
+    falls back to pd.to_numeric, which turns it into NaN.
+
+    Parameters:
+    - values (pd.Series): Raw integers as text, e.g. ' 123456' or ''.
+
+    Returns:
+    - pd.Series: int64, or float64 with NaN where a value is missing.
+    """
+    text = pc.utf8_trim_whitespace(pa.array(values, type=pa.string()))
+    try:
+        numbers = pc.cast(pc.if_else(pc.equal(text, ''), None, text), pa.int64())
+    except pa.ArrowInvalid:
+        return pd.to_numeric(values.str.strip().replace('', None), errors='coerce')
+    return pd.Series(numbers.to_pandas(), index=values.index)
 
 
 def decode_date(values):
@@ -26,7 +49,7 @@ def decode_date(values):
     Returns:
     - pd.Series: Timestamps, NaT for 0 or empty, OPEN_END for 9999999.
     """
-    codes = pd.to_numeric(values, errors='coerce').fillna(NO_DATE).astype('int64')
+    codes = to_integers(values).fillna(NO_DATE).astype('int64')
     real = (codes != NO_DATE) & (codes != OPEN_END_CODE)
 
     # CYYMMDD: the century digit C counts from 1900
@@ -53,10 +76,12 @@ def invalid_dates(values):
     Returns:
     - pd.Series: The raw values that `decode_date` had to clamp.
     """
-    codes = pd.to_numeric(values, errors='coerce').fillna(NO_DATE).astype('int64')
+    codes = to_integers(values).fillna(NO_DATE).astype('int64')
     real = codes[(codes != NO_DATE) & (codes != OPEN_END_CODE)]
-    yyyymmdd = (19000000 + real).astype(str)
-    return values[real.index][pd.to_datetime(yyyymmdd, format='%Y%m%d', errors='coerce').isna()]
+    month, day = real // 100 % 100, real % 100
+    month_start = pd.to_datetime(pd.DataFrame({'year': 1900 + real // 10000, 'month': month.clip(1, 12), 'day': 1}))
+    impossible = (month < 1) | (month > 12) | (day < 1) | (day > month_start.dt.days_in_month)
+    return values[real.index][impossible]
 
 
 def decode_number(values, scale):
@@ -70,7 +95,7 @@ def decode_number(values, scale):
     Returns:
     - pd.Series: Int64 for scale 0, otherwise float64 (exact enough to explore; use `to_decimal` to calculate).
     """
-    numbers = pd.to_numeric(values.str.strip().replace('', None), errors='coerce')
+    numbers = to_integers(values)
     if scale == 0:
         return numbers.astype('Int64')
     return numbers / 10 ** scale

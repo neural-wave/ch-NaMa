@@ -7,9 +7,8 @@ date that the fund has a price, at the issue (ask) price, converted with the exc
 import datetime as dt
 
 import pandas as pd
-from dateutil.relativedelta import relativedelta
 
-from rules import money, units, valid_on_date
+from rules import add_months, money, units, valid_on_date
 
 PAID = 'P'
 # Columns of a booking: gross is the premium share before the entry charge (premium bookings only)
@@ -62,10 +61,11 @@ def premium_bookings(data, market, policies, conversion):
     entry_rates = data.exact(allocated.ENTRY_RATE, scale=6)
 
     rows = []
-    for item, gross, share, entry in zip(allocated.itertuples(), received, shares, entry_rates):
+    items = allocated[['PR_POLNR', 'PR_RCVDT', 'AL_FNDID']].itertuples()
+    for item, gross, share, entry in zip(items, received, shares, entry_rates):
         policy = policies[item.PR_POLNR]
         money_date = item.PR_RCVDT.date()
-        initial_end = (policy.PH_BEGDT + relativedelta(months=int(policy.PD_INIMON))).date()
+        initial_end = add_months(policy.PH_BEGDT.date(), int(policy.PD_INIMON))
         trade, ask = market.purchase(item.AL_FNDID, money_date)
         cobol = trade < conversion
         amount = money(gross * share * (1 - entry), cobol)

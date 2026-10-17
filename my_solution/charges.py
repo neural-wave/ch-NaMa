@@ -14,10 +14,9 @@ import itertools
 from collections import defaultdict
 from decimal import Decimal
 
-from dateutil.relativedelta import relativedelta
 
 from risk import SMOKER, entry_age, mortality_table, sum_at_risk
-from rules import money, units
+from rules import add_months, money, units
 
 TARIFF_COLUMNS = ['CG_VLDFR', 'CG_VLDTO', 'CG_ADMFEE', 'CG_AMCP1', 'CG_AMCP2', 'CG_SMKFAC', 'CG_MORTTB']
 
@@ -63,7 +62,7 @@ class ChargeRun:
             tariffs[column] = data.exact(tariffs[column])
         self.tariffs = defaultdict(list)
         for row in tariffs.itertuples():
-            self.tariffs[(row.CG_TARFAM, row.CG_TARGEN)].append(row)
+            self.tariffs[(row.CG_TARFAM, row.CG_TARGEN)].append((row.CG_VLDFR.date(), row.CG_VLDTO.date(), row))
         agreements = data.table('NRAGRE').query("AG_FEETP == 'AMC'")
         self.agreements = defaultdict(list)
         for row, rate in zip(agreements.itertuples(), data.exact(agreements.AG_RATE)):
@@ -80,8 +79,7 @@ class ChargeRun:
         Returns:
         - namedtuple: Row of NRCHRG.
         """
-        return next(row for row in self.tariffs[(policy.TARFAM, policy.TARGEN)]
-                    if row.CG_VLDFR.date() <= day <= row.CG_VLDTO.date())
+        return next(row for start, end, row in self.tariffs[(policy.TARFAM, policy.TARGEN)] if start <= day <= end)
 
     def management_rate(self, policy, pot, tariff, day):
         """
@@ -99,7 +97,7 @@ class ChargeRun:
         agreed = [rate for start, end, rate in self.agreements[policy.PH_POLNR] if start <= day <= end]
         return agreed[-1] if agreed else (tariff.CG_AMCP1 if pot == '1' else tariff.CG_AMCP2)
 
-    def charge(self, policy, day, previous, positions):
+    def charge(self, policy, day, previous, positions, age):
         """
         The admin fee, management charge and risk charge of one monthly anniversary.
 
@@ -108,6 +106,7 @@ class ChargeRun:
         - day (datetime.date): Monthly anniversary.
         - previous (datetime.date): The anniversary before (for the days of the COBOL management charge).
         - positions (dict): {(fund, pot): units} held before the day.
+        - age (int): Age of the insured person in this policy year.
 
         Returns:
         - list: Bookings (policy, type, fund, pot, money date, trade date, gross, amount, units).
@@ -124,8 +123,7 @@ class ChargeRun:
                       for position, value in values.items()}
         left = {position: values[position] - admin[position] - management[position] for position in values}
 
-        age = entry_age(policy.PS_BIRTH, policy.PH_BEGDT, policy.PH_APPDT.date() < self.conversion)
-        qx = self.mortality[(tariff.CG_MORTTB, policy.SEX, age + relativedelta(day, policy.PH_BEGDT.date()).years)]
+        qx = self.mortality[(tariff.CG_MORTTB, policy.SEX, age)]
         smoker = tariff.CG_SMKFAC if policy.PS_SMOKE == SMOKER else 1
         risk = sum_at_risk(policy.OPTION, sum(left.values()), policy.RK_SUMIN) * qx * (1 + policy.RK_LOAD) * smoker / 12
         risk = split(money(risk, cobol), left, cobol)
@@ -153,8 +151,9 @@ class ChargeRun:
         holdings, bookings, waiting = defaultdict(Decimal), [], iter(trades + [(None, None, None, None)])
         trade = next(waiting)
         begin, previous = policy.PH_BEGDT.date(), policy.PH_BEGDT.date()
+        age = entry_age(policy.PS_BIRTH, policy.PH_BEGDT, policy.PH_APPDT.date() < self.conversion)
         for month in itertools.count(1):
-            day = begin + relativedelta(months=month)
+            day = add_months(begin, month)
             if day > until:
                 return bookings
             while trade[0] is not None and trade[0] < day:
@@ -162,7 +161,7 @@ class ChargeRun:
                 trade = next(waiting)
             positions = {position: held for position, held in holdings.items() if held > 0}
             if positions:
-                charged = self.charge(policy, day, previous, positions)
+                charged = self.charge(policy, day, previous, positions, age + month // 12)
                 for booking in charged:
                     holdings[(booking[2], booking[3])] += booking[8]
                 bookings += charged

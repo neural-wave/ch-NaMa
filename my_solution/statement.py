@@ -7,6 +7,7 @@ From the start year to the year the policy ends by surrender or death, at the la
 - admin fees, management fees, risk charges: the monthly charges booked in the year (fund accounting of t3);
 - total charges: entry charges + admin fees + management fees + risk charges.
 """
+import functools
 from collections import defaultdict
 from decimal import Decimal
 
@@ -18,6 +19,7 @@ LAST_YEAR = 2025
 CHARGE_COLUMNS = {'ADM': 1, 'AMC': 2, 'RSK': 3}
 
 
+@functools.cache
 def yearly_charges(data):
     """
     Entry, admin, management and risk charges of every policy and year of the trade date.
@@ -26,15 +28,16 @@ def yearly_charges(data):
     - data (LegacyData): Decoded export.
 
     Returns:
-    - dict: {(policy number, year): [entry, admin, management, risk]}
+    - dict: {(policy number, year): [entry, admin, management, risk]}, shared by t4 and t5
     """
     sums = defaultdict(lambda: [Decimal(0)] * 4)
-    for booking in bookings(data).itertuples():
-        key = (booking.policy, booking.trade.year)
-        if booking.type == 'PRM':
-            sums[key][0] += booking.gross - booking.amount
-        elif booking.type in CHARGE_COLUMNS:
-            sums[key][CHARGE_COLUMNS[booking.type]] += booking.amount
+    table = bookings(data)
+    # Plain lists: reading 6.8 million pandas rows one by one takes ten times longer
+    for policy, kind, trade, gross, amount in zip(*(table[column].tolist() for column in ['policy', 'type', 'trade', 'gross', 'amount'])):
+        if kind == 'PRM':
+            sums[(policy, trade.year)][0] += gross - amount
+        elif kind in CHARGE_COLUMNS:
+            sums[(policy, trade.year)][CHARGE_COLUMNS[kind]] += amount
     return sums
 
 

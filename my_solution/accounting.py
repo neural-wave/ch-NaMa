@@ -7,6 +7,7 @@
 """
 import datetime as dt
 import functools
+import itertools
 
 import pandas as pd
 
@@ -108,3 +109,22 @@ def bookings(data):
     - pd.DataFrame: Result of `all_bookings`.
     """
     return all_bookings(data, extract_date(data))
+
+
+@functools.cache
+def unit_history(data):
+    """
+    Units of every position after each of its bookings, so that a valuation does not re-add millions of bookings.
+
+    Parameters:
+    - data (LegacyData): Decoded export.
+
+    Returns:
+    - dict: {(policy, fund, pot): (trade dates in order, units held after each)}
+    """
+    table = bookings(data)
+    history = {}
+    for position, rows in table.groupby(['policy', 'fund', 'pot'], sort=False):
+        trades = sorted(zip(rows.trade.tolist(), rows.units.tolist()), key=lambda trade: trade[0])
+        history[position] = ([day for day, _ in trades], list(itertools.accumulate(held for _, held in trades)))
+    return history
