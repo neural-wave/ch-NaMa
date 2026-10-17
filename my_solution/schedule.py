@@ -10,22 +10,14 @@ FREQUENCY_MONTHS = {'M': 1, 'Q': 3, 'H': 6, 'J': 12}
 
 
 def due_dates(begin, end, months, conversion, until):
-    """
-    All due dates of a policy up to `until`, the way Neuron generates them.
-
-    The COBOL system (before the conversion to Neuron NG) added one period to the previous due date, so a day cut
-    by a short month stayed cut: 31.01. -> 28.02. -> 28.03. -> ... Neuron NG adds whole periods to an anchor and
-    cuts the day only in short months. For converted policies the anchor is the last COBOL due date.
-
-    Parameters:
-    - begin (datetime.date): Start date of the policy, the first due date.
-    - end (datetime.date): Maturity date, no due date on or after it.
-    - months (int): Months between two due dates.
-    - conversion (datetime.date): Day of the system conversion.
-    - until (datetime.date): Last day of the schedule.
-
-    Returns:
-    - list: Due dates as datetime.date.
+    """All due dates of a policy up to `until`, the way Neuron generates them.
+    The COBOL system (before the conversion to Neuron NG) added one period to the previous due date, so a day cut by a
+    short month stayed cut: 31.01. -> 28.02. -> 28.03. -> ... Neuron NG adds whole periods to an anchor and cuts the day
+    only in short months. For converted policies the anchor is the last COBOL due date.
+    Parameters: begin (datetime.date): Start date of the policy, the first due date; end (datetime.date): Maturity date,
+        no due date on or after it; months (int): Months between two due dates; conversion (datetime.date): Day of the
+        system conversion; until (datetime.date): Last day of the schedule.
+    Returns (list): Due dates as datetime.date.
     """
     dates, due = [], begin
     while due < min(conversion, end):
@@ -41,30 +33,18 @@ def due_dates(begin, end, months, conversion, until):
 
 
 def collection_date(due, payment_method, business_days):
-    """
-    Day the premium is collected: a direct debit (LS) on the next business day, a bank transfer (UB) on the due date.
-
-    Parameters:
-    - due (datetime.date): Due date.
-    - payment_method (str): 'LS' or 'UB'.
-    - business_days (BusinessCalendar): Business calendar of the export.
-
-    Returns:
-    - datetime.date: Collection date.
+    """Day the premium is collected: a direct debit (LS) on the next business day, a bank transfer (UB) on the due date.
+    Parameters: due (datetime.date): Due date; payment_method (str): 'LS' or 'UB'; business_days (BusinessCalendar):
+        Business calendar of the export.
+    Returns (datetime.date): Collection date.
     """
     return business_days.next_business_day(due) if payment_method == 'LS' else due
 
 
 def next_due_dates(data, extract_date):
-    """
-    Due and collection dates after the extract date, up to one year later, of every regular-premium policy in force.
-
-    Parameters:
-    - data (LegacyData): Decoded export.
-    - extract_date (datetime.date): Day of the export.
-
-    Returns:
-    - dict: {(policy number, n): (due date, collection date)} with n = 1, 2, ... after the extract date.
+    """Due and collection dates after the extract date, up to one year later, of every regular-premium policy in force.
+    Parameters: data (LegacyData): Decoded export; extract_date (datetime.date): Day of the export.
+    Returns (dict): {(policy number, n): (due date, collection date)} with n = 1, 2, ... after the extract date.
     """
     until = extract_date + relativedelta(years=1)
     conversion, business_days = conversion_date(data).date(), calendar(data)

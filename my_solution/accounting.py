@@ -6,38 +6,26 @@
 - Reversed events (900) and technical corrections (990) are ignored.
 """
 import datetime as dt
-import functools
 import itertools
-from collections import defaultdict, namedtuple
-from decimal import Decimal
+from collections import defaultdict
 
-import numpy as np
 import pandas as pd
 
 from charges import ChargeRun
 from market import Market
 from policies import policy_base
 from premiums import BOOKING_COLUMNS, premium_bookings
-from rules import conversion_date, extract_date
+from rules import conversion_date
 
 ORDER_TYPES = ['SWO', 'SWI', 'WDR', 'SUR', 'DTH']
 REVERSAL, TECHNICAL_CORRECTION = 900, 990
 SURRENDERED, DEATH = 60, 70
-CHARGE_COLUMNS = {'ADM': 1, 'AMC': 2, 'RSK': 3}
-MILLION = 1_000_000  # units have 6 decimals: held in millionths they are exact integers
-
-Ledger = namedtuple('Ledger', ['units', 'charges'])
 
 
 def ignored_events(data):
-    """
-    Events whose bookings do not count: reversed events and technical corrections.
-
-    Parameters:
-    - data (LegacyData): Decoded export.
-
-    Returns:
-    - set: {(policy number, event number)}
+    """Events whose bookings do not count: reversed events and technical corrections.
+    Parameters: data (LegacyData): Decoded export.
+    Returns (set): {(policy number, event number)}.
     """
     events = data.table('NREVNT')
     reversals = events[events.EV_EVTTP == REVERSAL]
@@ -46,14 +34,9 @@ def ignored_events(data):
 
 
 def order_bookings(data):
-    """
-    Bookings of the customer orders, as they are in the export.
-
-    Parameters:
-    - data (LegacyData): Decoded export.
-
-    Returns:
-    - pd.DataFrame: One row per booking, in the columns of BOOKING_COLUMNS.
+    """Bookings of the customer orders, as they are in the export.
+    Parameters: data (LegacyData): Decoded export.
+    Returns (pd.DataFrame): One row per booking, in the columns of BOOKING_COLUMNS.
     """
     orders = data.select('NRBOOK', 'BK_BKTYP', ORDER_TYPES)
     ignored = ignored_events(data)
@@ -65,31 +48,19 @@ def order_bookings(data):
 
 
 def end_dates(data):
-    """
-    Day a policy ended by surrender or death: from this day on there are no more monthly charges.
-
-    Parameters:
-    - data (LegacyData): Decoded export.
-
-    Returns:
-    - dict: {policy number: datetime.date}
+    """Day a policy ended by surrender or death: from this day on there are no more monthly charges.
+    Parameters: data (LegacyData): Decoded export.
+    Returns (dict): {policy number: datetime.date}.
     """
     ended = data.table('NRPOLH').query('PH_STATE in [@SURRENDERED, @DEATH]').groupby('PH_POLNR').PH_VLDFR.min()
     return {policy: day.date() for policy, day in ended.items()}
 
 
 def policy_bookings(data, until):
-    """
-    The unit bookings of one policy after the other: premiums, customer orders and monthly charges up to `until`.
-
+    """The unit bookings of one policy after the other: premiums, customer orders and monthly charges up to `until`.
     One policy at a time, so that the 6.8 million bookings of the export never sit in memory together.
-
-    Parameters:
-    - data (LegacyData): Decoded export.
-    - until (datetime.date): Last day of the monthly charges.
-
-    Returns:
-    - generator: (policy number, [booking as a tuple in the columns of BOOKING_COLUMNS])
+    Parameters: data (LegacyData): Decoded export; until (datetime.date): Last day of the monthly charges.
+    Returns (generator): (policy number, [booking as a tuple in the columns of BOOKING_COLUMNS]).
     """
     market, conversion = Market(data), conversion_date(data).date()
     # Rows as namedtuples by policy number: much faster to read in the booking loops than pandas rows
@@ -108,45 +79,9 @@ def policy_bookings(data, until):
 
 
 def all_bookings(data, until):
-    """
-    All unit bookings of every policy up to `until` as one table, to explore them (the tasks use `ledger`).
-
-    Parameters:
-    - data (LegacyData): Decoded export.
-    - until (datetime.date): Last day of the monthly charges.
-
-    Returns:
-    - pd.DataFrame: One row per booking, in the columns of BOOKING_COLUMNS.
+    """All unit bookings of every policy up to `until` as one table, to explore them (the tasks use ledger.py).
+    Parameters: data (LegacyData): Decoded export; until (datetime.date): Last day of the monthly charges.
+    Returns (pd.DataFrame): One row per booking, in the columns of BOOKING_COLUMNS.
     """
     rows = [booking for _, booked in policy_bookings(data, until) for booking in booked]
     return pd.DataFrame(rows, columns=BOOKING_COLUMNS)
-
-
-@functools.cache
-def ledger(data):
-    """
-    What the tasks need from all bookings up to the extract date, collected policy by policy.
-
-    Parameters:
-    - data (LegacyData): Decoded export.
-
-    Returns:
-    - Ledger:
-      units: {(policy, fund, pot): (trade days as ordinals, units held after each day in millionths)}, numpy
-      arrays, so that a valuation on any day (t3, t7) is one search per position;
-      charges: {(policy, year of the trade date): [entry, admin, management, risk]} for the statements (t4).
-    """
-    units, charges = {}, defaultdict(lambda: [Decimal(0)] * 4)
-    for policy, booked in policy_bookings(data, extract_date(data)):
-        moves = defaultdict(list)
-        for _, kind, fund, pot, _, trade, gross, amount, held in booked:
-            moves[(fund, pot)].append((trade.toordinal(), int(held * MILLION)))
-            if kind == 'PRM':
-                charges[(policy, trade.year)][0] += gross - amount
-            elif kind in CHARGE_COLUMNS:
-                charges[(policy, trade.year)][CHARGE_COLUMNS[kind]] += amount
-        for (fund, pot), changes in moves.items():
-            changes.sort(key=lambda change: change[0])
-            units[(policy, fund, pot)] = (np.array([day for day, _ in changes]),
-                                          np.cumsum([change for _, change in changes]))
-    return Ledger(units, charges)

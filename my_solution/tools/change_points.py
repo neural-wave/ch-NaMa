@@ -8,20 +8,12 @@ import pandas as pd
 
 
 def change_points(dates, wrong, top=3, min_rows=20):
-    """
-    Find the split dates that best separate wrong from right values.
-
+    """Find the split dates that best separate wrong from right values.
     Every candidate split predicts the majority (wrong or right) on each side; its score is the share of values this
     one-split rule explains. A sudden change of behaviour on one day gives a score close to 100 %.
-
-    Parameters:
-    - dates (sequence): Date of every value.
-    - wrong (sequence): True where the value differs from the target.
-    - top (int): Number of splits to return.
-    - min_rows (int): Fewest values each side of a split must have.
-
-    Returns:
-    - pd.DataFrame: last day before and first day after the change, share wrong on both sides, share explained.
+    Parameters: dates (sequence): Date of every value; wrong (sequence): True where the value differs from the target;
+        top (int): Number of splits to return; min_rows (int): Fewest values each side of a split must have.
+    Returns (pd.DataFrame): last day before and first day after the change, share wrong on both sides, share explained.
     """
     frame = pd.DataFrame({'day': pd.to_datetime(list(dates)), 'wrong': list(wrong)})
     daily = frame.groupby('day').wrong.agg(['sum', 'count'])

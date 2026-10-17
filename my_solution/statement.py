@@ -10,7 +10,8 @@ From the start year to the year the policy ends by surrender or death, at the la
 from collections import defaultdict
 from decimal import Decimal
 
-from accounting import end_dates, ledger
+from accounting import end_dates
+from ledger import ledger
 from premiums import PAID
 from rules import money
 
@@ -18,27 +19,17 @@ LAST_YEAR = 2025
 
 
 def yearly_charges(data):
-    """
-    Entry, admin, management and risk charges of every policy and year of the trade date.
-
-    Parameters:
-    - data (LegacyData): Decoded export.
-
-    Returns:
-    - dict: {(policy number, year): [entry, admin, management, risk]}
+    """Entry, admin, management and risk charges of every policy and year of the trade date.
+    Parameters: data (LegacyData): Decoded export.
+    Returns (dict): {(policy number, year): [entry, admin, management, risk]}.
     """
     return ledger(data).charges
 
 
 def yearly_premiums(data):
-    """
-    Paid premiums of every policy and year of the money date.
-
-    Parameters:
-    - data (LegacyData): Decoded export.
-
-    Returns:
-    - dict: {(policy number, year): premiums}
+    """Paid premiums of every policy and year of the money date.
+    Parameters: data (LegacyData): Decoded export.
+    Returns (dict): {(policy number, year): premiums}.
     """
     paid = data.table('NRPREM').query('PR_STATE == @PAID')
     sums = defaultdict(Decimal)
@@ -48,14 +39,9 @@ def yearly_premiums(data):
 
 
 def annual_statements(data):
-    """
-    Annual statement of every policy and calendar year.
-
-    Parameters:
-    - data (LegacyData): Decoded export.
-
-    Returns:
-    - dict: {(policy number, year): (premiums, entry, admin, management, risk, total)}
+    """Annual statement of every policy and calendar year.
+    Parameters: data (LegacyData): Decoded export.
+    Returns (dict): {(policy number, year): (premiums, entry, admin, management, risk, total)}.
     """
     premiums, charges, ended = yearly_premiums(data), yearly_charges(data), end_dates(data)
     starts = data.table('NRPOLH').groupby('PH_POLNR').PH_BEGDT.min()

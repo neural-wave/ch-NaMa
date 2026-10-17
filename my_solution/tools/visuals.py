@@ -16,15 +16,9 @@ VARIANT_COLORS = [RED, GREEN, INK, GRAY]
 
 
 def save(fig, output_filename):
-    """
-    Save a figure in the Plots folder of the project.
-
-    Parameters:
-    - fig (matplotlib.figure.Figure): Figure to save.
-    - output_filename (str): File name, e.g. 'errors_by_era.png'; nothing is saved if None.
-
-    Returns:
-    - None
+    """Save a figure in the Plots folder of the project.
+    Parameters: fig (matplotlib.figure.Figure): Figure to save; output_filename (str): File name, e.g.
+        'errors_by_era.png'; nothing is saved if None.
     """
     if output_filename:
         os.makedirs(PLOTS, exist_ok=True)
@@ -32,30 +26,19 @@ def save(fig, output_filename):
 
 
 def share_wrong_by_year(years, wrong):
-    """
-    Percentage of wrong values per year.
-
-    Parameters:
-    - years (sequence): Year of every value, e.g. the application year.
-    - wrong (sequence): True where a value differs from the target.
-
-    Returns:
-    - pd.Series: {year: % wrong}
+    """Percentage of wrong values per year.
+    Parameters: years (sequence): Year of every value, e.g. the application year; wrong (sequence): True where a value
+        differs from the target.
+    Returns (pd.Series): {year: % wrong}.
     """
     return pd.Series(list(wrong), dtype=float).groupby(list(years)).mean() * 100
 
 
 def plot_errors_by_era(panels, conversion, output_filename=None):
-    """
-    Plot the share of wrong values per year of several rule variants, one panel per task.
-
-    Parameters:
-    - panels (list): [(title, years, {variant name: wrong flags})], one entry per panel.
-    - conversion (pd.Timestamp): Day of the system conversion; the years before are shaded as the COBOL era.
-    - output_filename (str): File name in the Plots folder.
-
-    Returns:
-    - None
+    """Plot the share of wrong values per year of several rule variants, one panel per task.
+    Parameters: panels (list): [(title, years, {variant name: wrong flags})], one entry per panel; conversion
+        (pd.Timestamp): Day of the system conversion; the years before are shaded as the COBOL era; output_filename
+        (str): File name in the Plots folder.
     """
     fig, axes = plt.subplots(len(panels), 1, figsize=(12, 3.3 * len(panels)), sharex=True, squeeze=False)
     conversion_year = conversion.year + (conversion.dayofyear - 1) / 365.25
@@ -79,16 +62,9 @@ def plot_errors_by_era(panels, conversion, output_filename=None):
 
 
 def plot_statement_waterfall(statement, title, output_filename=None):
-    """
-    Plot the charges of one annual statement as a waterfall that adds them up to the total charges.
-
-    Parameters:
-    - statement (tuple): (premiums, entry, admin, management, risk, total) of one policy and year.
-    - title (str): Title of the plot, e.g. the policy and year.
-    - output_filename (str): File name in the Plots folder.
-
-    Returns:
-    - None
+    """Plot the charges of one annual statement as a waterfall that adds them up to the total charges.
+    Parameters: statement (tuple): (premiums, entry, admin, management, risk, total) of one policy and year; title
+        (str): Title of the plot, e.g. the policy and year; output_filename (str): File name in the Plots folder.
     """
     premiums, entry, admin, management, risk, total = map(float, statement)
     steps = [('Entry charges', entry), ('Admin fees', admin), ('Management fees', management), ('Risk charges', risk)]

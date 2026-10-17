@@ -15,14 +15,9 @@ BOOKING_COLUMNS = ['policy', 'type', 'fund', 'pot', 'money_date', 'trade', 'gros
 
 
 def allocated_premiums(data):
-    """
-    One row per paid premium and fund, with the allocation share and the entry charge rate of the money date.
-
-    Parameters:
-    - data (LegacyData): Decoded export.
-
-    Returns:
-    - pd.DataFrame: Premium items joined with their allocation, broker tier and entry charge rate.
+    """One row per paid premium and fund, with the allocation share and the entry charge rate of the money date.
+    Parameters: data (LegacyData): Decoded export.
+    Returns (pd.DataFrame): Premium items joined with their allocation, broker tier and entry charge rate.
     """
     # Only the columns the bookings need: 550,000 rows with every column of six tables take gigabytes
     premiums = data.table('NRPREM').query('PR_STATE == @PAID')[['PR_POLNR', 'PR_DUENR', 'PR_RCVDT', 'PR_AMTRC']]
@@ -45,17 +40,11 @@ def allocated_premiums(data):
 
 
 def premium_bookings(data, market, policies, conversion):
-    """
-    Premium bookings of all paid premiums.
-
-    Parameters:
-    - data (LegacyData): Decoded export.
-    - market (Market): Prices and exchange rates.
-    - policies (dict): {policy number: row of `policy_base`}
-    - conversion (datetime.date): Day of the system conversion.
-
-    Returns:
-    - list: Bookings as tuples in the columns of BOOKING_COLUMNS (plain tuples need far less memory than a table).
+    """Premium bookings of all paid premiums.
+    Parameters: data (LegacyData): Decoded export; market (Market): Prices and exchange rates; policies (dict): {policy
+        number: row of `policy_base`}; conversion (datetime.date): Day of the system conversion.
+    Returns (list): Bookings as tuples in the columns of BOOKING_COLUMNS (plain tuples need far less memory than a
+        table).
     """
     allocated = allocated_premiums(data)
     received, shares = data.exact(allocated.PR_AMTRC), data.exact(allocated.AL_PCTG)

@@ -15,11 +15,8 @@ ROUNDING_MODES = {'half up': ROUND_HALF_UP, 'half even': ROUND_HALF_EVEN, 'cut o
 
 
 def signatures():
-    """
-    Known ratios between a value and its usual calculation, e.g. a monthly charge by actual days / 360.
-
-    Returns:
-    - dict: {description: ratio}
+    """Known ratios between a value and its usual calculation, e.g. a monthly charge by actual days / 360.
+    Returns (dict): {description: ratio}.
     """
     known = {'factor 2': 2.0, 'half': 0.5}
     for days in range(28, 32):
@@ -29,16 +26,10 @@ def signatures():
 
 
 def rounding_modes(exact_values, targets, step='0.01'):
-    """
-    Share of the targets each rounding mode reproduces from the exact (unrounded) values.
-
-    Parameters:
-    - exact_values (sequence): Unrounded calculated values (Decimal).
-    - targets (sequence): Target values (Decimal).
-    - step (str): Rounding step, e.g. '0.01' for cents or '0.000001' for fund units.
-
-    Returns:
-    - pd.Series: {rounding mode: share of exact matches}, best first.
+    """Share of the targets each rounding mode reproduces from the exact (unrounded) values.
+    Parameters: exact_values (sequence): Unrounded calculated values (Decimal); targets (sequence): Target values
+        (Decimal); step (str): Rounding step, e.g. '0.01' for cents or '0.000001' for fund units.
+    Returns (pd.Series): {rounding mode: share of exact matches}, best first.
     """
     pairs = list(zip(exact_values, targets))
     shares = {name: sum(Decimal(value).quantize(Decimal(step), mode) == Decimal(target) for value, target in pairs)
@@ -47,16 +38,10 @@ def rounding_modes(exact_values, targets, step='0.01'):
 
 
 def classify_differences(calculated, targets, step='0.01'):
-    """
-    Label every difference target - calculated.
-
-    Parameters:
-    - calculated (sequence): Calculated values.
-    - targets (sequence): Target values.
-    - step (str): Smallest unit of the values, e.g. '0.01'.
-
-    Returns:
-    - pd.Series: Count of 'exact', 'one step' (rounding), 'whole units' (often a manual correction) and 'other'.
+    """Label every difference target - calculated.
+    Parameters: calculated (sequence): Calculated values; targets (sequence): Target values; step (str): Smallest unit
+        of the values, e.g. '0.01'.
+    Returns (pd.Series): Count of 'exact', 'one step' (rounding), 'whole units' (often a manual correction) and 'other'.
     """
     labels = Counter()
     for value, target in zip(calculated, targets):
@@ -73,18 +58,11 @@ def classify_differences(calculated, targets, step='0.01'):
 
 
 def implied_ratios(calculated, targets, top=5, decimals=3, tolerance=0.004):
-    """
-    The most common ratios target / calculated, with the known signature each one matches.
-
-    Parameters:
-    - calculated (sequence): Calculated values (non-zero).
-    - targets (sequence): Target values.
-    - top (int): Number of ratios to report.
-    - decimals (int): Decimals the ratios are rounded to before counting.
-    - tolerance (float): Largest distance between a ratio and a signature.
-
-    Returns:
-    - pd.DataFrame: ratio, number of values, matching signature.
+    """The most common ratios target / calculated, with the known signature each one matches.
+    Parameters: calculated (sequence): Calculated values (non-zero); targets (sequence): Target values; top (int):
+        Number of ratios to report; decimals (int): Decimals the ratios are rounded to before counting; tolerance
+        (float): Largest distance between a ratio and a signature.
+    Returns (pd.DataFrame): ratio, number of values, matching signature.
     """
     ratios = Counter(round(float(target) / float(value), decimals) for value, target in zip(calculated, targets)
                      if float(value) != 0 and float(target) != float(value))

@@ -10,7 +10,7 @@ from decimal import Decimal
 
 from dateutil.relativedelta import relativedelta
 
-from accounting import ledger
+from ledger import ledger
 from legacy_loader import valid_on
 from market import Market
 from policies import policy_base
@@ -21,17 +21,10 @@ ENDED = [60, 70]
 
 @functools.cache
 def penalty_rate(data, scale, years, day):
-    """
-    Surrender penalty of a surrender scale after `years` completed policy years; none in a waiver period.
-
-    Parameters:
-    - data (LegacyData): Decoded export.
-    - scale (int): Surrender scale of the product (PD_SRPSCL).
-    - years (int): Completed policy years.
-    - day (datetime.date): Valuation date.
-
-    Returns:
-    - Decimal: Penalty rate (0 if the scale has no row for these years).
+    """Surrender penalty of a surrender scale after `years` completed policy years; none in a waiver period.
+    Parameters: data (LegacyData): Decoded export; scale (int): Surrender scale of the product (PD_SRPSCL); years (int):
+        Completed policy years; day (datetime.date): Valuation date.
+    Returns (Decimal): Penalty rate (0 if the scale has no row for these years).
     """
     waivers = data.table('NRWAIV')
     if ((waivers.WV_VLDFR.dt.date <= day) & (day <= waivers.WV_VLDTO.dt.date)).any():
@@ -42,16 +35,10 @@ def penalty_rate(data, scale, years, day):
 
 
 def policy_values(data, market, day):
-    """
-    Value of the units of every policy on `day`, each fund and pot rounded to the cent.
-
-    Parameters:
-    - data (LegacyData): Decoded export.
-    - market (Market): Prices and exchange rates.
-    - day (datetime.date): Valuation date.
-
-    Returns:
-    - dict: {policy number: value}
+    """Value of the units of every policy on `day`, each fund and pot rounded to the cent.
+    Parameters: data (LegacyData): Decoded export; market (Market): Prices and exchange rates; day (datetime.date):
+        Valuation date.
+    Returns (dict): {policy number: value}.
     """
     cobol = day < conversion_date(data).date()
     currency = dict(zip(data.table('NRPOLH').PH_POLNR, data.table('NRPOLH').PH_CCY))
@@ -66,15 +53,9 @@ def policy_values(data, market, day):
 
 
 def surrender_values(data, valuation_dates):
-    """
-    Surrender value of every policy that started on or before each valuation date.
-
-    Parameters:
-    - data (LegacyData): Decoded export.
-    - valuation_dates (list): Valuation dates as datetime.date.
-
-    Returns:
-    - dict: {(policy number, valuation date): surrender value}
+    """Surrender value of every policy that started on or before each valuation date.
+    Parameters: data (LegacyData): Decoded export; valuation_dates (list): Valuation dates as datetime.date.
+    Returns (dict): {(policy number, valuation date): surrender value}.
     """
     market, policies = Market(data), policy_base(data)
     result = {}

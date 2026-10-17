@@ -33,8 +33,8 @@ Università della Svizzera italiana (USI), Lugano.
 | t5 Outliers | 55 found | all 38 NREXCP corrections of the train policies plus 17 unlisted ones |
 | t7 Tax audit (surprise) | no targets | both examples of the task exact; every tax Neuron booked gets an amount |
 
-Maintainability index (radon): 68. Runtime: about 45 seconds for t0-t5, 30 of them for the fund accounting of t3; t7 adds 3 seconds, as it reuses
-the accounting.
+Maintainability index (radon): 75. Runtime: about 35 seconds for t0-t5 with a peak memory of 1.7 GB; t7 adds 3 seconds,
+as it reuses the fund accounting.
 
 ## Approach
 
@@ -144,11 +144,14 @@ train policies are exact except one manual correction.
 
 - `submission.py`: the entry point, one function per task.
 - `commission.py` (t0), `schedule.py` (t1), `projection.py` (t2), `surrender.py` (t3), `statement.py` (t4),
-  `outliers.py` (t5), `taxes.py` with `tax_rules.py` and `stamp_duty.py` (t7): one module per task.
+  `outliers.py` (t5), `taxes.py` with `tax_data.py`, `withholding.py`, `tax_rules.py` and `stamp_duty.py` (t7):
+  one module per task.
 - `risk.py`: risk charge (sum at risk, entry age, mortality table), shared by t2 and t3.
 - `rules.py`: shared building blocks (loading, date-valid lookups, rounding by system era, conversion date).
 - `business_calendar.py`: business days and holidays.
-- `legacy_loader.py`, `legacy_formats.py`: reading and decoding the export.
+- `legacy_loader.py`, `legacy_tables.py`, `legacy_formats.py`: reading and decoding the export, chunk by chunk.
+- `charge_parameters.py`, `ledger.py`: parameters of the monthly charges, and what t3, t4 and t7 keep of the
+  6.8 million bookings (units per position and day, charges per year).
 - `tools/rule_finder.py`, `tools/change_points.py`, `tools/residuals.py`, `tools/convention_search.py`,
   `tools/weak_labels.py`: the generic discovery tools (see Approach).
 - `tools/visuals.py` (t6): share of wrong values per year and system era, waterfall of an annual statement.

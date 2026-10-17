@@ -15,31 +15,19 @@ MIN_YEARS = 3
 
 
 def weekdays(first, last):
-    """
-    All Mondays to Fridays from `first` to `last`.
-
-    Parameters:
-    - first (datetime.date): First day.
-    - last (datetime.date): Last day.
-
-    Returns:
-    - list: Weekdays as datetime.date.
+    """All Mondays to Fridays from `first` to `last`.
+    Parameters: first (datetime.date): First day; last (datetime.date): Last day.
+    Returns (list): Weekdays as datetime.date.
     """
     days = (first + dt.timedelta(days=offset) for offset in range((last - first).days + 1))
     return [day for day in days if day.weekday() < 5]
 
 
 def closed_keys(days, open_days, key):
-    """
-    The keys (e.g. the date in the year) of the weekdays that never have a price.
-
-    Parameters:
-    - days (list): Weekdays of the observed period.
-    - open_days (set): Days with prices.
-    - key (callable): key(day), e.g. (month, day) or the days after Easter Sunday.
-
-    Returns:
-    - set: Keys seen closed in at least MIN_YEARS years and never open.
+    """The keys (e.g. the date in the year) of the weekdays that never have a price.
+    Parameters: days (list): Weekdays of the observed period; open_days (set): Days with prices; key (callable):
+        key(day), e.g. (month, day) or the days after Easter Sunday.
+    Returns (set): Keys seen closed in at least MIN_YEARS years and never open.
     """
     seen = defaultdict(lambda: [0, 0])  # key -> [closed, open]
     for day in days:
@@ -49,14 +37,8 @@ def closed_keys(days, open_days, key):
 
 class BusinessCalendar:
     def __init__(self, open_days):
-        """
-        Learn the holiday rules from the days that have prices.
-
-        Parameters:
-        - open_days (iterable): Days with at least one price, as datetime.date.
-
-        Returns:
-        - None
+        """Learn the holiday rules from the days that have prices.
+        Parameters: open_days (iterable): Days with at least one price, as datetime.date.
         """
         open_days = set(open_days)
         days = weekdays(min(open_days), max(open_days))
@@ -65,14 +47,9 @@ class BusinessCalendar:
         self.cache = {}
 
     def holidays(self, year):
-        """
-        All holidays of one year.
-
-        Parameters:
-        - year (int): Calendar year.
-
-        Returns:
-        - set: Holidays as datetime.date.
+        """All holidays of one year.
+        Parameters: year (int): Calendar year.
+        Returns (set): Holidays as datetime.date.
         """
         if year not in self.cache:
             fixed = {dt.date(year, month, day) for month, day in self.fixed if (month, day) != (2, 29)}
@@ -80,26 +57,16 @@ class BusinessCalendar:
         return self.cache[year]
 
     def is_business_day(self, day):
-        """
-        Check if a day is a working day: Monday to Friday and no holiday.
-
-        Parameters:
-        - day (datetime.date): Day to check.
-
-        Returns:
-        - bool: True for a business day.
+        """Check if a day is a working day: Monday to Friday and no holiday.
+        Parameters: day (datetime.date): Day to check.
+        Returns (bool): True for a business day.
         """
         return day.weekday() < 5 and day not in self.holidays(day.year)
 
     def next_business_day(self, day):
-        """
-        The day itself if it is a business day, otherwise the next business day.
-
-        Parameters:
-        - day (datetime.date): Starting day.
-
-        Returns:
-        - datetime.date: First business day on or after `day`.
+        """The day itself if it is a business day, otherwise the next business day.
+        Parameters: day (datetime.date): Starting day.
+        Returns (datetime.date): First business day on or after `day`.
         """
         while not self.is_business_day(day):
             day += dt.timedelta(days=1)
@@ -108,13 +75,8 @@ class BusinessCalendar:
 
 @functools.cache
 def calendar(data):
-    """
-    The business calendar of an export, learned from its fund price days.
-
-    Parameters:
-    - data (LegacyData): Decoded export.
-
-    Returns:
-    - BusinessCalendar: Learned calendar.
+    """The business calendar of an export, learned from its fund price days.
+    Parameters: data (LegacyData): Decoded export.
+    Returns (BusinessCalendar): Learned calendar.
     """
     return BusinessCalendar(day.date() for day in data.table('NRFPRC').FP_PRCDT.unique())

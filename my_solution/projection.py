@@ -24,14 +24,9 @@ EXACT_COLUMNS = ['IL_RATE', 'CG_ADMFEE', 'CG_AMCP2', 'CG_SMKFAC', 'EC_RATE']
 
 
 def offer_terms(data):
-    """
-    Everything an offer was calculated with: the policy as applied for and the parameters of its application date.
-
-    Parameters:
-    - data (LegacyData): Decoded export.
-
-    Returns:
-    - pd.DataFrame: One row per policy.
+    """Everything an offer was calculated with: the policy as applied for and the parameters of its application date.
+    Parameters: data (LegacyData): Decoded export.
+    Returns (pd.DataFrame): One row per policy.
     """
     policies = policy_base(data)
     policies = valid_on_date(policies, 'PH_APPDT', data.table('NRILLU'), 'IL', {})
@@ -44,16 +39,10 @@ def offer_terms(data):
 
 
 def project(policy, mortality, conversion):
-    """
-    Simulate one offer month by month.
-
-    Parameters:
-    - policy (namedtuple): One row of `offer_terms`.
-    - mortality (dict): Result of `mortality_table`.
-    - conversion (pd.Timestamp): Day of the system conversion.
-
-    Returns:
-    - list: Value at the end of every policy year, the last one is the value at maturity.
+    """Simulate one offer month by month.
+    Parameters: policy (namedtuple): One row of `offer_terms`; mortality (dict): Result of `mortality_table`; conversion
+        (pd.Timestamp): Day of the system conversion.
+    Returns (list): Value at the end of every policy year, the last one is the value at maturity.
     """
     cobol = policy.PH_APPDT < conversion
     months = (policy.PH_ENDDT.year - policy.PH_BEGDT.year) * 12 + policy.PH_ENDDT.month - policy.PH_BEGDT.month
@@ -78,27 +67,17 @@ def project(policy, mortality, conversion):
 
 
 def projected_values(data):
-    """
-    Projected values at the end of every policy year, for every policy.
-
-    Parameters:
-    - data (LegacyData): Decoded export.
-
-    Returns:
-    - dict: {policy number: [value at the end of policy year 1, 2, ...]}
+    """Projected values at the end of every policy year, for every policy.
+    Parameters: data (LegacyData): Decoded export.
+    Returns (dict): {policy number: [value at the end of policy year 1, 2, ...]}.
     """
     mortality, conversion = mortality_table(data), conversion_date(data)
     return {policy.PH_POLNR: project(policy, mortality, conversion) for policy in offer_terms(data).itertuples()}
 
 
 def maturity_values(data):
-    """
-    Projected value at maturity of every policy.
-
-    Parameters:
-    - data (LegacyData): Decoded export.
-
-    Returns:
-    - dict: {policy number: value at maturity}
+    """Projected value at maturity of every policy.
+    Parameters: data (LegacyData): Decoded export.
+    Returns (dict): {policy number: value at maturity}.
     """
     return {policy: values[-1] for policy, values in projected_values(data).items()}

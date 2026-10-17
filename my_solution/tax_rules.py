@@ -18,28 +18,17 @@ CH_REMITTANCE_DAYS = 30
 
 
 def tax_currency(country):
-    """
-    Currency a country taxes in.
-
-    Parameters:
-    - country (str): Country code, e.g. 'DE'.
-
-    Returns:
-    - str: 'CHF' for Switzerland, otherwise 'EUR'.
+    """Currency a country taxes in.
+    Parameters: country (str): Country code, e.g. 'DE'.
+    Returns (str): 'CHF' for Switzerland, otherwise 'EUR'.
     """
     return TAX_CURRENCY.get(country, 'EUR')
 
 
 def remittance_date(country, day):
-    """
-    Day a tax withheld on `day` was paid to the tax office.
-
-    Parameters:
-    - country (str): Country whose tax office gets the money.
-    - day (datetime.date): Day of the payout.
-
-    Returns:
-    - datetime.date: Remittance date.
+    """Day a tax withheld on `day` was paid to the tax office.
+    Parameters: country (str): Country whose tax office gets the money; day (datetime.date): Day of the payout.
+    Returns (datetime.date): Remittance date.
     """
     next_month = day.replace(day=1) + relativedelta(months=1)
     if country in REMITTANCE_DAY:
@@ -49,14 +38,8 @@ def remittance_date(country, day):
 
 class TaxRates:
     def __init__(self, data):
-        """
-        Index the versioned tax rates by country and tax type.
-
-        Parameters:
-        - data (LegacyData): Decoded export.
-
-        Returns:
-        - None
+        """Index the versioned tax rates by country and tax type.
+        Parameters: data (LegacyData): Decoded export.
         """
         table = data.table('NRTAXR')
         thresholds = [None if value != value else value for value in table.TX_THRSH]
@@ -66,18 +49,11 @@ class TaxRates:
                 (row.TX_REGIO, row.TX_VLDFR.date(), row.TX_VLDTO.date(), row.TX_VRSNR, row.TX_CHGTS, rate, threshold))
 
     def rate(self, country, tax, day, known_at=None, region=''):
-        """
-        Rate of a tax valid on `day`, as known at `known_at`.
-
-        Parameters:
-        - country (str): Country code.
-        - tax (str): Tax type, e.g. 'KST'.
-        - day (datetime.date): Day the rate must be valid on.
-        - known_at (pd.Timestamp): Processing time of the booking; later versions are not known yet.
-        - region (str): Region of the residence, for regional rates.
-
-        Returns:
-        - tuple: (rate, threshold), (None, None) if the tax has no rate on that day.
+        """Rate of a tax valid on `day`, as known at `known_at`.
+        Parameters: country (str): Country code; tax (str): Tax type, e.g. 'KST'; day (datetime.date): Day the rate must
+            be valid on; known_at (pd.Timestamp): Processing time of the booking; later versions are not known yet;
+            region (str): Region of the residence, for regional rates.
+        Returns (tuple): (rate, threshold), (None, None) if the tax has no rate on that day.
         """
         rows = [row for row in self.rows[(country, tax)]
                 if row[1] <= day <= row[2] and (known_at is None or row[4] <= known_at) and row[0] in ('', region)]
@@ -89,14 +65,8 @@ class TaxRates:
 
 class Residence:
     def __init__(self, data):
-        """
-        Index the policyholders and their addresses with their validity periods.
-
-        Parameters:
-        - data (LegacyData): Decoded export.
-
-        Returns:
-        - None
+        """Index the policyholders and their addresses with their validity periods.
+        Parameters: data (LegacyData): Decoded export.
         """
         self.holders, self.addresses = defaultdict(list), defaultdict(list)
         for row in data.table('NRHOLD').sort_values('HD_VRSNR').itertuples():
@@ -112,41 +82,23 @@ class Residence:
         return valid[-1] if valid else None
 
     def holder(self, policy, day):
-        """
-        Policyholder of a policy on `day`.
-
-        Parameters:
-        - policy (str): Policy number.
-        - day (datetime.date): Day.
-
-        Returns:
-        - str: Person number.
+        """Policyholder of a policy on `day`.
+        Parameters: policy (str): Policy number; day (datetime.date): Day.
+        Returns (str): Person number.
         """
         return self.valid(self.holders[policy], day) or self.holders[policy][0][2]
 
     def address(self, policy, day):
-        """
-        Address of the policyholder valid on `day`.
-
-        Parameters:
-        - policy (str): Policy number.
-        - day (datetime.date): Day.
-
-        Returns:
-        - namedtuple: Row of NRADDR (country, region, reporting status, church membership).
+        """Address of the policyholder valid on `day`.
+        Parameters: policy (str): Policy number; day (datetime.date): Day.
+        Returns (namedtuple): Row of NRADDR (country, region, reporting status, church membership).
         """
         person = self.holder(policy, day)
         return self.valid(self.addresses[person], day) or self.addresses[person][-1][2]
 
     def birth(self, policy, day):
-        """
-        Birth date of the policyholder on `day`.
-
-        Parameters:
-        - policy (str): Policy number.
-        - day (datetime.date): Day.
-
-        Returns:
-        - datetime.date: Birth date.
+        """Birth date of the policyholder on `day`.
+        Parameters: policy (str): Policy number; day (datetime.date): Day.
+        Returns (datetime.date): Birth date.
         """
         return self.persons[self.holder(policy, day)].date()

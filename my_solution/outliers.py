@@ -20,14 +20,9 @@ TARGET_COLUMNS = {
 
 
 def parse(text):
-    """
-    Read one field of a target file: an ISO date, a whole number, an amount or text.
-
-    Parameters:
-    - text (str): Field, e.g. '2026-07-01', '12', '9.45' or 'BL10000013'.
-
-    Returns:
-    - object: datetime.date, int, Decimal or str.
+    """Read one field of a target file: an ISO date, a whole number, an amount or text.
+    Parameters: text (str): Field, e.g. '2026-07-01', '12', '9.45' or 'BL10000013'.
+    Returns (object): datetime.date, int, Decimal or str.
     """
     try:
         return dt.date.fromisoformat(text)
@@ -40,28 +35,17 @@ def parse(text):
 
 
 def single(values):
-    """
-    A tuple of one element as the element itself, like the keys and values of the submission.
-
-    Parameters:
-    - values (tuple): Parsed fields.
-
-    Returns:
-    - object: The only field, or the tuple.
+    """A tuple of one element as the element itself, like the keys and values of the submission.
+    Parameters: values (tuple): Parsed fields.
+    Returns (object): The only field, or the tuple.
     """
     return values[0] if len(values) == 1 else values
 
 
 def read_targets(targets_dir, task):
-    """
-    Target values of a task, keyed like the results of the submission.
-
-    Parameters:
-    - targets_dir (str): Folder with the target files.
-    - task (str): Task name, e.g. 't0_commission'.
-
-    Returns:
-    - dict: {key: value}, empty if the folder has no file for the task.
+    """Target values of a task, keyed like the results of the submission.
+    Parameters: targets_dir (str): Folder with the target files; task (str): Task name, e.g. 't0_commission'.
+    Returns (dict): {key: value}, empty if the folder has no file for the task.
     """
     path = pathlib.Path(targets_dir) / f'{task}.csv'
     if not path.exists():
@@ -73,15 +57,10 @@ def read_targets(targets_dir, task):
 
 
 def manual_corrections(calculators, targets_dir):
-    """
-    All target values that differ from the calculated ones.
-
-    Parameters:
-    - calculators (dict): {task: function(target keys) -> {key: calculated value}}
-    - targets_dir (str): Folder with the target files of the policies to check.
-
-    Returns:
-    - set: {(task, key)} of the values that were changed by hand.
+    """All target values that differ from the calculated ones.
+    Parameters: calculators (dict): {task: function(target keys) -> {key: calculated value}}; targets_dir (str): Folder
+        with the target files of the policies to check.
+    Returns (set): {(task, key)} of the values that were changed by hand.
     """
     corrections = set()
     for task, calculate in calculators.items():
