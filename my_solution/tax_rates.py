@@ -1,4 +1,5 @@
 """Versioned tax rates, selected as known at the booking timestamp."""
+import datetime as dt
 from collections import defaultdict
 
 
@@ -13,6 +14,12 @@ class TaxRates:
         for row, rate, threshold in zip(table.itertuples(), data.exact(table.TX_RATE), thresholds):
             self.rows[(row.TX_CNTRY, row.TX_TAXTP)].append(
                 (row.TX_REGIO, row.TX_VLDFR.date(), row.TX_VLDTO.date(), row.TX_VRSNR, row.TX_CHGTS, rate, threshold))
+
+    def changes(self, country, tax, known_at=None):
+        """Last days of the rate periods that another period follows, as known at `known_at`."""
+        rows = [row for row in self.rows[(country, tax)] if known_at is None or row[4] <= known_at]
+        starts = {row[1] for row in rows}
+        return sorted({row[2] for row in rows if row[2] + dt.timedelta(days=1) in starts})
 
     def rate(self, country, tax, day, known_at=None, region=''):
         """Rate of a tax valid on `day`, as known at `known_at`.

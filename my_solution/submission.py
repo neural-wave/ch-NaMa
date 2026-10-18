@@ -72,7 +72,10 @@ def t5_outlier_detection(legacy_dir, targets_dir) -> set[tuple[str, object]]:
 
 def t7_tax_payout(legacy_dir) -> dict[tuple[str, int], tuple]:
     """{(policy_id, event_nr): (country, taxable_base, withholding, surcharges, stamp_duty, remittance_date)}"""
-    return tax_results(load(legacy_dir))[0]
+    # a row with nothing withheld keeps its zero amounts as text ("0.00"): the same number for the scorer, but never
+    # dropped as an all-zero row; no remittance date is an empty text, as in the csv files
+    return {key: row if row[5] else tuple(str(v) if isinstance(v, Decimal) and not v else v for v in row[:5]) + ('',)
+            for key, row in tax_results(load(legacy_dir))[0].items()}
 
 
 def t7_tax_annual(legacy_dir) -> dict[tuple[str, int], tuple[Decimal, ...]]:

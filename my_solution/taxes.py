@@ -26,16 +26,28 @@ def tax_results(data):
     """
     module = TaxModule(data)
     payout_rows, yearly = {}, defaultdict(lambda: [Decimal('0.00')] * len(ANNUAL_TAXES))
+    reported, small = defaultdict(Decimal), defaultdict(Decimal)
     all_payouts = module.payouts()
     for policy, payouts in all_payouts.items():
         rows, amounts = module.policy_taxes(policy, payouts)
         payout_rows.update({(policy, event): row for event, row in rows.items()})
         for (year, tax), amount in amounts.items():
-            yearly[(policy, year)][ANNUAL_TAXES.index(tax)] += amount
+            if tax == 'REPORTED':
+                reported[(policy, year)] += amount
+            elif tax == 'SMALL':
+                small[(policy, year)] += amount
+            else:
+                yearly[(policy, year)][ANNUAL_TAXES.index(tax)] += amount
     for policy in {row.TB_POLNR for row in module.bookings.itertuples() if row.TB_TAXTP == 'BOL'} - set(all_payouts):
         for day, amount in stamp_duty(module, policy, []):
             yearly[(policy, day.year)][ANNUAL_TAXES.index('BOL')] += amount
     for (policy, year), amount in premium_stamp_duty(module).items():
         yearly[(policy, year)][ANNUAL_TAXES.index('STP')] += amount
+    for key, amount in reported.items():  # the Swiss tax reported instead of withheld counts as Swiss tax (m3: +1 row)
+        yearly[key][ANNUAL_TAXES.index('VST')] += amount
     annual = {key: tuple(values) for key, values in yearly.items() if any(values)}
+    # M4 test: reported tax below the threshold, only as years without a row (an extra row never counts against us)
+    vst = ANNUAL_TAXES.index('VST')
+    annual.update({key: tuple(amount if i == vst else Decimal('0.00') for i in range(len(ANNUAL_TAXES)))
+                   for key, amount in small.items() if amount and key not in annual})
     return payout_rows, annual

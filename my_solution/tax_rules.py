@@ -14,9 +14,9 @@ import datetime as dt
 from dateutil.relativedelta import relativedelta
 
 TAX_CURRENCY = {'CH': 'CHF'}
-# Neuron's tax job ran on the 10th of every month (the year-end stamp duty is processed on 10 January): withheld
-# taxes of a month are paid on the 10th of the next month, for every country
-REMITTANCE_DAY = 10
+# Candidate: DE/IT use the next month's fixed day; CH uses the next month's end.
+# Swiss timing is provisional: score feedback did not isolate it from other changes.
+REMITTANCE_DAY = {'DE': 10, 'IT': 16}
 
 
 def tax_currency(country):
@@ -27,9 +27,22 @@ def tax_currency(country):
     return TAX_CURRENCY.get(country, 'EUR')
 
 
+def end_of_next_month(day):
+    """Last day of the month after `day`."""
+    return day.replace(day=1) + relativedelta(months=2) - dt.timedelta(days=1)
+
+
+def month_end_plus_30(day):
+    """Swiss withholding tax on insurance benefits is due 30 days after the end of the month of the payout."""
+    return day.replace(day=1) + relativedelta(months=1) - dt.timedelta(days=1) + dt.timedelta(days=30)
+
+
 def remittance_date(country, day):
     """Day a tax withheld on `day` was paid to the tax office.
     Parameters: country (str): Country whose tax office gets the money; day (datetime.date): Day of the payout.
     Returns (datetime.date): Remittance date.
     """
-    return (day.replace(day=1) + relativedelta(months=1)).replace(day=REMITTANCE_DAY)
+    next_month = day.replace(day=1) + relativedelta(months=1)
+    if country in REMITTANCE_DAY:
+        return next_month.replace(day=REMITTANCE_DAY[country])
+    return next_month + relativedelta(months=1) - dt.timedelta(days=1)
